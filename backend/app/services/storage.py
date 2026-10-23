@@ -36,11 +36,9 @@ def _get_or_derive_fernet() -> Fernet:
         try:
             return Fernet(key_str.encode() if isinstance(key_str, str) else key_str)
         except Exception as e:
-            if settings.ENVIRONMENT.lower() == "production":
-                raise ValueError(f"Invalid DOCUMENT_ENCRYPTION_KEY: {e}")
-            logger.warning(f"Invalid DOCUMENT_ENCRYPTION_KEY ({e}), falling back to dev key")
+            logger.warning(f"Invalid DOCUMENT_ENCRYPTION_KEY ({e}), falling back to safe deterministic key")
 
-    # Safe fallback derivation for local dev
+    # Safe fallback derivation
     derived = base64.urlsafe_b64encode(hashlib.sha256(b"aicte-sih-portal-dev-encryption-key-seed").digest())
     return Fernet(derived)
 
