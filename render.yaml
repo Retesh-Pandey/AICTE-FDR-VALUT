@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: aicte-fdr-vault-api
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    healthCheckPath: /health/ocr
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DOCUMENT_ENCRYPTION_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: VERIFIER_MODE
+        value: mock
+      - key: ENABLE_DEMO_LOGIN
+        value: "true"
+      - key: ENABLE_SIMULATED_DATE
+        value: "true"
