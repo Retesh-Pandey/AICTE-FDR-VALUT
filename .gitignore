@@ -1,0 +1,62 @@
+# Environments and Dependencies
+.venv/
+backend/.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.*
+backend/.env
+backend/.env.*
+!.env.example
+!frontend/.env.example
+!backend/.env.example
+
+
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build outputs & caches
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+backend/storage/uploads/
+uploads/
+
+# SQLite test files
+*.sqlite
+*.sqlite3
+*.db
+backend/fdr_vault.db
+
+# Private keys, certificates, and secrets
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# Scratch & local developer caches
+scratch/
+*.log
+*.timestamp-*.mjs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+

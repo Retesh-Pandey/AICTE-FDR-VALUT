@@ -1,0 +1,9 @@
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = ["B008", "E501"]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"app/db/models/__init__.py" = ["F401"]

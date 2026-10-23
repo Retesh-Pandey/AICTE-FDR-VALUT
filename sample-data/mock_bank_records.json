@@ -1,0 +1,42 @@
+[
+  {
+    "fdr_number": "39482019482",
+    "bank_name": "State Bank of India",
+    "branch": "Parliament Street Branch, New Delhi",
+    "amount": "15000000.00",
+    "issue_date": "2024-10-21",
+    "maturity_date": "2029-10-21",
+    "lien_marked": true,
+    "status": "CONFIRMED"
+  },
+  {
+    "fdr_number": "PNB77492011",
+    "bank_name": "Punjab National Bank",
+    "branch": "Noida Sector 18 Branch",
+    "amount": "5000000.00",
+    "issue_date": "2026-10-11",
+    "maturity_date": "2031-10-15",
+    "lien_marked": true,
+    "status": "CONFIRMED"
+  },
+  {
+    "fdr_number": "CAN88910244",
+    "bank_name": "Canara Bank",
+    "branch": "MG Road Bengaluru Branch",
+    "amount": "7500000.00",
+    "issue_date": "2021-10-21",
+    "maturity_date": "2026-11-04",
+    "lien_marked": true,
+    "status": "CONFIRMED"
+  },
+  {
+    "fdr_number": "ICIC5501928",
+    "bank_name": "ICICI Bank",
+    "branch": "Indiranagar Branch, Bengaluru",
+    "amount": "4000000.00",
+    "issue_date": "2026-08-22",
+    "maturity_date": "2029-08-21",
+    "lien_marked": true,
+    "status": "AMOUNT_MISMATCH"
+  }
+]

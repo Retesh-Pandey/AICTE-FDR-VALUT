@@ -1,0 +1,209 @@
+import io
+from datetime import date, timedelta
+from decimal import Decimal
+
+import openpyxl
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.core.security import create_access_token
+from app.db.models import (
+    FDRRecord,
+    Institution,
+    InstrumentStatus,
+    User,
+    UserRole,
+    VerificationStatus,
+    WorkflowStatus,
+)
+from app.main import app
+
+
+def get_auth_header(user: User) -> dict:
+    token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+            "institution_id": str(user.institution_id) if user.institution_id else None,
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_reports_access_control(db: Session):
+    client = TestClient(app)
+
+    # 1. Institution user
+    inst = db.query(Institution).first()
+    inst_user = db.query(User).filter(User.role == UserRole.institution).first()
+    if not inst_user:
+        inst_user = User(
+            email="inst_rep_test@example.com",
+            role=UserRole.institution,
+            institution_id=inst.id if inst else None,
+        )
+        db.add(inst_user)
+        db.commit()
+
+    inst_headers = get_auth_header(inst_user)
+
+    # Institution user allowed to access own reports
+    res = client.get("/reports/data", headers=inst_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "records" in data
+
+    # Institution user forbidden from passing foreign institution_id
+    foreign_inst = db.query(Institution).filter(Institution.id != inst_user.institution_id).first()
+    if foreign_inst:
+        res_foreign = client.get(f"/reports/data?institution_id={foreign_inst.id}", headers=inst_headers)
+        assert res_foreign.status_code == 403
+        assert res_foreign.json()["error"]["code"] == "CROSS_TENANT_FORBIDDEN"
+
+    res_exp = client.get("/reports/export", headers=inst_headers)
+    assert res_exp.status_code == 200
+
+
+    # 2. Officer user allowed
+    officer_user = db.query(User).filter(User.role == UserRole.officer).first()
+    if not officer_user:
+        officer_user = User(
+            email="officer_rep_test@example.com",
+            role=UserRole.officer,
+        )
+        db.add(officer_user)
+        db.commit()
+
+    officer_headers = get_auth_header(officer_user)
+
+    res_data = client.get("/reports/data?type=all", headers=officer_headers)
+    assert res_data.status_code == 200
+    data = res_data.json()
+    assert data["report_type"] == "all"
+    assert "records" in data
+    assert isinstance(data["records"], list)
+
+
+def test_reports_excel_export_and_metadata_sheet(db: Session):
+    client = TestClient(app)
+
+    admin_user = db.query(User).filter(User.role == UserRole.admin).first()
+    if not admin_user:
+        admin_user = User(
+            email="admin_rep_test@example.com",
+            role=UserRole.admin,
+        )
+        db.add(admin_user)
+        db.commit()
+
+    headers = get_auth_header(admin_user)
+
+    # Test each export filter type
+    for r_type in ["all", "expiring", "pending", "renewed", "released"]:
+        response = client.get(f"/reports/export?type={r_type}", headers=headers)
+        assert response.status_code == 200
+        assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in response.headers["content-type"]
+        assert f"aicte_fdr_report_{r_type}_" in response.headers["content-disposition"]
+
+        # Parse with openpyxl to verify valid workbook structure
+        excel_bytes = io.BytesIO(response.content)
+        wb = openpyxl.load_workbook(excel_bytes)
+
+        # Assert required sheets exist
+        assert "AICTE FDR Registry" in wb.sheetnames
+        assert "Generation Metadata" in wb.sheetnames
+
+        # Verify Primary Registry Sheet headers
+        ws_reg = wb["AICTE FDR Registry"]
+        expected_cols = [
+            "FDR Number",
+            "Institution Name",
+            "AICTE Institution ID",
+            "Issuing Bank",
+            "Branch Name",
+            "Principal Amount (INR)",
+            "Issue Date",
+            "Maturity Date",
+            "Instrument Status",
+            "Verification Status",
+            "Workflow Stage",
+            "Statutory Lien Designation",
+            "Intake Timestamp",
+        ]
+        actual_cols = [cell.value for cell in ws_reg[1]]
+        for col in expected_cols:
+            assert col in actual_cols
+
+        # Verify Metadata sheet contains AICTE attribution and user info
+        ws_meta = wb["Generation Metadata"]
+        meta_dict = {row[0]: row[1] for row in ws_meta.iter_rows(values_only=True) if row[0]}
+        assert meta_dict["SYSTEM"] == "AICTE Smart FDR Lifecycle Management Portal (SIH26265)"
+        assert meta_dict["REPORT TYPE"] == r_type.upper()
+        assert admin_user.email in meta_dict["GENERATED BY"]
+        assert "TOTAL RECORDS" in meta_dict
+        assert "TOTAL PRINCIPAL AMOUNT" in meta_dict
+        assert "₹" in meta_dict["TOTAL PRINCIPAL AMOUNT"]
+
+
+def test_dashboard_priority_cases_and_charts(db: Session):
+    client = TestClient(app)
+
+    # Seed a high-urgency discrepancy record
+    import uuid
+    fdr_num = f"FDR-DISC-{uuid.uuid4().hex[:8]}"
+    inst = db.query(Institution).first()
+    discrepancy_fdr = FDRRecord(
+        fdr_number=fdr_num,
+        institution_id=inst.id if inst else None,
+        bank_name="Punjab National Bank",
+        amount=Decimal("1500000.00"),
+        issue_date=date.today() - timedelta(days=60),
+        maturity_date=date.today() + timedelta(days=20),
+        instrument_status=InstrumentStatus.active,
+        verification_status=VerificationStatus.discrepancy,
+        workflow_status=WorkflowStatus.none,
+        lien_info="Lien marked in favor of Member Secretary AICTE",
+    )
+    db.add(discrepancy_fdr)
+    db.commit()
+
+    officer_user = db.query(User).filter(User.role == UserRole.officer).first()
+    headers = get_auth_header(officer_user)
+
+    # 1. Test Priority Cases
+    res_priority = client.get("/dashboard/priority-cases", headers=headers)
+    assert res_priority.status_code == 200
+    cases = res_priority.json()
+    assert isinstance(cases, list)
+    assert len(cases) > 0
+
+    # Ensure the discrepancy case is classified as high urgency
+    discrepancy_case = next((c for c in cases if c["fdr_number"] == fdr_num), None)
+    assert discrepancy_case is not None
+    assert discrepancy_case["priority_type"] == "discrepancy"
+    assert discrepancy_case["urgency"] == "high"
+
+    # 2. Test Charts Telemetry
+    res_charts = client.get("/dashboard/charts", headers=headers)
+    assert res_charts.status_code == 200
+    chart_data = res_charts.json()
+
+    assert "status_distribution" in chart_data
+    assert "maturity_by_month" in chart_data
+    assert "amount_by_bank" in chart_data
+
+    # Verify status distribution covers all key statuses
+    statuses_present = [item["status"] for item in chart_data["status_distribution"]]
+    assert "active" in statuses_present
+    assert "renewal_due" in statuses_present
+    assert "matured" in statuses_present
+    assert "renewed" in statuses_present
+    assert "released" in statuses_present
+
+    # Verify maturity by month has 12 buckets
+    assert len(chart_data["maturity_by_month"]) == 12
+
+    # Verify bank concentration has PNB
+    banks_present = [item["bank_name"] for item in chart_data["amount_by_bank"]]
+    assert "Punjab National Bank" in banks_present

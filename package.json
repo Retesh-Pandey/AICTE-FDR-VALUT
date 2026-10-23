@@ -1,0 +1,11 @@
+{
+  "name": "aicte-fdr-vault-workspace",
+  "private": true,
+  "description": "Root workspace proxy for AICTE Smart FDR Portal frontend scripts",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "typecheck": "npm --prefix frontend run typecheck"
+  }
+}
